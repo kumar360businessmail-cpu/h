@@ -1,0 +1,8 @@
+# Create icons folder and add PNG files here
+# Required files:
+# - icons/icon-16.png (16x16 pixels)
+# - icons/icon-48.png (48x48 pixels)  
+# - icons/icon-128.png (128x128 pixels)
+
+# Quick fix: Remove the icon references from manifest.json
+# OR add PNG files to this folder
