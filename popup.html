@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simplify Copilot</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Simplify Copilot</h1>
+            <p>Privacy-First Job Application Assistant</p>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="resume">Resume</button>
+            <button class="tab-btn" data-tab="autofill">Autofill</button>
+            <button class="tab-btn" data-tab="tracker">Tracker</button>
+            <button class="tab-btn" data-tab="settings">Settings</button>
+        </nav>
+
+        <!-- Resume Tab -->
+        <div id="resume" class="tab-content active">
+            <h2>Resume Information</h2>
+            <p class="subtitle">All data stored locally on your device - 100% offline</p>
+            
+            <form id="resumeForm">
+                <div class="form-group">
+                    <label>Full Name</label>
+                    <input type="text" id="fullName" placeholder="Your full name">
+                </div>
+
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="email" placeholder="your.email@example.com">
+                </div>
+
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="tel" id="phone" placeholder="+1 (555) 123-4567">
+                </div>
+
+                <div class="form-group">
+                    <label>Location</label>
+                    <input type="text" id="location" placeholder="City, State">
+                </div>
+
+                <div class="form-group">
+                    <label>LinkedIn URL</label>
+                    <input type="url" id="linkedin" placeholder="https://linkedin.com/in/yourprofile">
+                </div>
+
+                <div class="form-group">
+                    <label>GitHub URL</label>
+                    <input type="url" id="github" placeholder="https://github.com/yourprofile">
+                </div>
+
+                <div class="form-group">
+                    <label>Professional Summary</label>
+                    <textarea id="summary" placeholder="Brief professional summary..." rows="4"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Skills (comma-separated)</label>
+                    <textarea id="skills" placeholder="JavaScript, React, Node.js, Python..." rows="3"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Experience (JSON format)</label>
+                    <textarea id="experience" placeholder='[{"company": "Acme Corp", "position": "Developer", "years": "2020-2023"}]' rows="4"></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Save Resume</button>
+            </form>
+            <div id="resumeStatus" class="status-message"></div>
+        </div>
+
+        <!-- Autofill Tab -->
+        <div id="autofill" class="tab-content">
+            <h2>Autofill Settings</h2>
+            <p class="subtitle">Automatically fill job application forms with your data</p>
+            
+            <div class="settings-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="autoFillEnabled" checked>
+                    <span>Enable autofill on job sites</span>
+                </label>
+            </div>
+
+            <div class="settings-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="autoFillName" checked>
+                    <span>Autofill Name</span>
+                </label>
+            </div>
+
+            <div class="settings-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="autoFillEmail" checked>
+                    <span>Autofill Email</span>
+                </label>
+            </div>
+
+            <div class="settings-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="autoFillPhone" checked>
+                    <span>Autofill Phone</span>
+                </label>
+            </div>
+
+            <div class="settings-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="autoFillLocation" checked>
+                    <span>Autofill Location</span>
+                </label>
+            </div>
+
+            <h3>Supported Job Sites</h3>
+            <ul class="site-list">
+                <li>✓ LinkedIn</li>
+                <li>✓ Indeed</li>
+                <li>✓ Glassdoor</li>
+                <li>✓ Monster</li>
+                <li>✓ ZipRecruiter</li>
+                <li>✓ Generic job application forms</li>
+            </ul>
+
+            <button class="btn btn-primary" id="testAutofill">Test Autofill</button>
+        </div>
+
+        <!-- Tracker Tab -->
+        <div id="tracker" class="tab-content">
+            <h2>Application Tracker</h2>
+            <p class="subtitle">Track all your job applications</p>
+            
+            <div class="tracker-controls">
+                <button class="btn btn-secondary" id="addApplication">+ New Application</button>
+            </div>
+
+            <div id="applicationsList" class="applications-list">
+                <p class="empty-state">No applications tracked yet</p>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings" class="tab-content">
+            <h2>Settings & Privacy</h2>
+            <p class="subtitle">Manage your data and privacy preferences</p>
+            
+            <div class="settings-group">
+                <h3>Data Privacy</h3>
+                <p>🔒 <strong>100% Offline:</strong> All your data is stored locally in your browser. No data is sent to any server.</p>
+                <p>🔒 <strong>No Cloud Sync:</strong> Your resume and applications never leave your device.</p>
+                <p>🔒 <strong>No Tracking:</strong> No analytics, no telemetry, complete privacy.</p>
+            </div>
+
+            <div class="settings-group">
+                <h3>Data Management</h3>
+                <button class="btn btn-secondary" id="exportData">Export Data (JSON)</button>
+                <button class="btn btn-secondary" id="importData">Import Data</button>
+                <input type="file" id="importFile" accept=".json" style="display: none;">
+            </div>
+
+            <div class="settings-group">
+                <h3>Danger Zone</h3>
+                <button class="btn btn-danger" id="clearData">Clear All Data</button>
+                <p style="font-size: 12px; color: #666; margin-top: 8px;">⚠️ This will permanently delete all your resume data and application tracking.</p>
+            </div>
+
+            <div class="settings-group">
+                <h3>About</h3>
+                <p>Version: 1.0.0</p>
+                <p>Privacy-First Job Application Assistant</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="storage.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>
