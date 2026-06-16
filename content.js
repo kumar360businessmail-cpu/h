@@ -1,12 +1,218 @@
-// Content Script - Enhanced form detection and autofill
-// Handles diverse job application forms from LinkedIn, Indeed, Glassdoor, etc.
+// Enhanced Content Script - Smart Form Detection & Autofill
+// Works with LinkedIn, Indeed, Glassdoor, Workday, and generic forms
+// ZERO external API calls - 100% local intelligence
 
-class EnhancedFormAutofiller {
+class SmartFormAutofiller {
   constructor() {
-    // Expanded field patterns for different job sites
-    this.fieldPatterns = {
+    this.fieldPatterns = this.buildPatterns();
+    this.workdayQuestions = [];
+    this.init();
+  }
+
+  buildPatterns() {
+    return {
       'fullName': {
-        patterns: ['name', 'full.?name', 'fullname', 'full_name', 'applicant.?name', 'your.?name', 'candidate.?name', 'person.?name', 'display.?name', 'fullname', 'first.?last', 'name.*full'],
-        selectors: ['[name*="name"]', '[id*="name"]', '[placeholder*="name"]', 'input[aria-label*="name"]']
+        patterns: ['name', 'full.?name', 'fullname', 'full_name', 'applicant.?name', 'your.?name', 'candidate.?name'],
+        selectors: ['[name*="name"]', '[id*="name"]', '[placeholder*="name"]', '[aria-label*="name"]']
       },
-      'firstName': {\n        patterns: ['first.?name', 'firstname', 'first_name', 'fname', 'given.?name', 'forename'],\n        selectors: ['[name*="first"]', '[id*="first"]', '[placeholder*="first"]']\n      },\n      'lastName': {\n        patterns: ['last.?name', 'lastname', 'last_name', 'lname', 'surname', 'family.?name'],\n        selectors: ['[name*="last"]', '[id*="last"]', '[placeholder*="last"]']\n      },\n      'email': {\n        patterns: ['email', 'e.?mail', 'email.?address', 'contact.?email', 'work.?email', 'primary.?email', 'your.?email'],\n        selectors: ['[name*="email"]', '[id*="email"]', '[placeholder*="email"]', 'input[type="email"]', 'input[aria-label*="email"]']\n      },\n      'phone': {\n        patterns: ['phone', 'mobile', 'telephone', 'cell', 'contact.?phone', 'phone.?number', 'mobile.?number', 'work.?phone'],\n        selectors: ['[name*="phone"]', '[id*="phone"]', '[placeholder*="phone"]', '[name*="mobile"]', '[id*="mobile"]', 'input[type="tel"]', 'input[aria-label*="phone"]']\n      },\n      'location': {\n        patterns: ['location', 'city', 'address', 'city.*state', 'current.?location', 'work.?location', 'place', 'region', 'area', 'where'],\n        selectors: ['[name*="location"]', '[id*="location"]', '[placeholder*="location"]', '[name*="city"]', '[id*="city"]', '[name*="address"]']\n      },\n      'zipcode': {\n        patterns: ['zip', 'postal', 'postcode', 'zip.?code'],\n        selectors: ['[name*="zip"]', '[id*="zip"]', '[name*="postal"]', '[placeholder*="zip"]']\n      },\n      'linkedin': {\n        patterns: ['linkedin', 'linkedin.?url', 'linkedin.?profile', 'linkedin.?link'],\n        selectors: ['[name*="linkedin"]', '[id*="linkedin"]', '[placeholder*="linkedin"]']\n      },\n      'github': {\n        patterns: ['github', 'github.?url', 'github.?profile', 'github.?link'],\n        selectors: ['[name*="github"]', '[id*="github"]', '[placeholder*="github"]']\n      },\n      'summary': {\n        patterns: ['summary', 'bio', 'about', 'profile', 'professional', 'overview', 'introduction'],\n        selectors: ['[name*="summary"]', '[id*="summary"]', '[name*="bio"]', '[id*="bio"]', '[name*="about"]', 'textarea']\n      },\n      'skills': {\n        patterns: ['skills', 'expertise', 'competencies', 'abilities', 'technical'],\n        selectors: ['[name*="skills"]', '[id*="skills"]', '[placeholder*="skills"]']\n      }\n    };\n\n    this.init();\n  }\n\n  async init() {\n    // Listen for messages from popup\n    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {\n      if (request.action === 'autofill') {\n        this.autofillPage(request.data);\n        sendResponse({ success: true });\n      } else if (request.action === 'detectForms') {\n        const fields = this.detectAllFormFields();\n        sendResponse({ fields });\n      } else if (request.action === 'getFormAnalysis') {\n        const analysis = this.analyzePageForms();\n        sendResponse({ analysis });\n      }\n    });\n\n    // Auto-detect and log forms on page load\n    this.detectPageForms();\n  }\n\n  // Main autofill function\n  async autofillPage(resumeData) {\n    const allFields = this.getAllFormFields();\n    console.log(`🔍 Found ${allFields.length} form fields to potentially fill`);\n\n    allFields.forEach((field, index) => {\n      const matchedField = this.matchFieldToResume(field, resumeData);\n      if (matchedField) {\n        console.log(`✓ Field ${index}: Filling ${matchedField.fieldType} -> ${matchedField.value.substring(0, 20)}...`);\n        this.fillField(field.element, matchedField.value);\n      }\n    });\n  }\n\n  // Get ALL form fields from the page\n  getAllFormFields() {\n    const fields = [];\n    \n    // Text inputs, emails, tel\n    document.querySelectorAll('input[type=\"text\"], input[type=\"email\"], input[type=\"tel\"], input:not([type])').forEach(el => {\n      if (this.isVisible(el)) {\n        fields.push({\n          element: el,\n          name: el.getAttribute('name') || '',\n          id: el.getAttribute('id') || '',\n          placeholder: el.getAttribute('placeholder') || '',\n          label: this.getLabel(el) || '',\n          ariaLabel: el.getAttribute('aria-label') || '',\n          type: 'input',\n          currentValue: el.value\n        });\n      }\n    });\n\n    // Textareas\n    document.querySelectorAll('textarea').forEach(el => {\n      if (this.isVisible(el)) {\n        fields.push({\n          element: el,\n          name: el.getAttribute('name') || '',\n          id: el.getAttribute('id') || '',\n          placeholder: el.getAttribute('placeholder') || '',\n          label: this.getLabel(el) || '',\n          ariaLabel: el.getAttribute('aria-label') || '',\n          type: 'textarea',\n          currentValue: el.value\n        });\n      }\n    });\n\n    // Selects (for location, country, etc.)\n    document.querySelectorAll('select').forEach(el => {\n      if (this.isVisible(el)) {\n        fields.push({\n          element: el,\n          name: el.getAttribute('name') || '',\n          id: el.getAttribute('id') || '',\n          label: this.getLabel(el) || '',\n          type: 'select',\n          options: Array.from(el.querySelectorAll('option')).map(o => o.value)\n        });\n      }\n    });\n\n    return fields;\n  }\n\n  // Smart field matching with fuzzy logic\n  matchFieldToResume(field, resumeData) {\n    const fieldText = `${field.name} ${field.id} ${field.placeholder} ${field.label} ${field.ariaLabel}`.toLowerCase();\n\n    for (const [resumeField, value] of Object.entries(resumeData)) {\n      if (!value) continue;\n\n      const patterns = this.fieldPatterns[resumeField]?.patterns || [];\n      \n      // Check pattern matches\n      for (const pattern of patterns) {\n        const regex = new RegExp(pattern, 'i');\n        if (regex.test(fieldText)) {\n          return { fieldType: resumeField, value };\n        }\n      }\n\n      // Fallback: check if field name is similar\n      if (this.stringSimilarity(fieldText, resumeField) > 0.6) {\n        return { fieldType: resumeField, value };\n      }\n    }\n\n    return null;\n  }\n\n  // Fill different types of fields\n  fillField(element, value) {\n    if (!element) return;\n\n    const tagName = element.tagName.toLowerCase();\n\n    if (tagName === 'select') {\n      // For selects, try to find matching option\n      const options = element.querySelectorAll('option');\n      const matching = Array.from(options).find(o => \n        o.text.toLowerCase().includes(String(value).toLowerCase()) ||\n        o.value.toLowerCase().includes(String(value).toLowerCase())\n      );\n      if (matching) {\n        element.value = matching.value;\n      }\n    } else if (tagName === 'textarea' || tagName === 'input') {\n      element.value = String(value);\n      element.dispatchEvent(new Event('input', { bubbles: true }));\n      element.dispatchEvent(new Event('change', { bubbles: true }));\n      element.dispatchEvent(new Event('blur', { bubbles: true }));\n      \n      // For React/Vue forms\n      const inputEvent = new Event('input', { bubbles: true });\n      Object.defineProperty(inputEvent, 'target', { value: element, enumerable: true });\n      element.dispatchEvent(inputEvent);\n    }\n\n    element.classList.add('simplify-autofilled');\n    console.log(`✓ Filled: ${element.name || element.id} = ${String(value).substring(0, 30)}...`);\n  }\n\n  // Get associated label for a form field\n  getLabel(element) {\n    // Check for explicit label\n    const id = element.getAttribute('id');\n    if (id) {\n      const label = document.querySelector(`label[for=\"${id}\"]`);\n      if (label) return label.textContent;\n    }\n\n    // Check for wrapped label\n    let parent = element.parentElement;\n    while (parent && parent !== document.body) {\n      if (parent.tagName.toLowerCase() === 'label') {\n        return parent.textContent;\n      }\n      parent = parent.parentElement;\n    }\n\n    // Check for nearby label\n    const nearby = element.parentElement?.querySelector('label');\n    if (nearby) return nearby.textContent;\n\n    return '';\n  }\n\n  // Check if element is visible\n  isVisible(element) {\n    return element.offsetParent !== null && \n           getComputedStyle(element).display !== 'none' &&\n           getComputedStyle(element).visibility !== 'hidden';\n  }\n\n  // String similarity (simple Levenshtein-like)\n  stringSimilarity(str1, str2) {\n    const s1 = str1.toLowerCase();\n    const s2 = str2.toLowerCase();\n    const longer = s1.length > s2.length ? s1 : s2;\n    const shorter = s1.length > s2.length ? s2 : s1;\n    if (longer.length === 0) return 1.0;\n    const editDistance = this.getEditDistance(longer, shorter);\n    return (longer.length - editDistance) / longer.length;\n  }\n\n  // Levenshtein distance\n  getEditDistance(s1, s2) {\n    const costs = [];\n    for (let i = 0; i <= s1.length; i++) {\n      let lastValue = i;\n      for (let j = 0; j <= s2.length; j++) {\n        if (i === 0) {\n          costs[j] = j;\n        } else if (j > 0) {\n          let newValue = costs[j - 1];\n          if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {\n            newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;\n          }\n          costs[j - 1] = lastValue;\n          lastValue = newValue;\n        }\n      }\n      if (i > 0) costs[s2.length] = lastValue;\n    }\n    return costs[s2.length];\n  }\n\n  // Detect all forms on page and log them\n  detectPageForms() {\n    const forms = document.querySelectorAll('form');\n    console.log(`%c🔍 Found ${forms.length} form(s) on this page`, 'color: blue; font-weight: bold;');\n    \n    forms.forEach((form, index) => {\n      console.group(`Form ${index + 1}`);\n      const fields = this.detectFormFields(form);\n      console.log(`Fields: ${fields.length}`, fields);\n      console.groupEnd();\n    });\n  }\n\n  // Analyze page forms\n  analyzePageForms() {\n    const forms = document.querySelectorAll('form');\n    return {\n      formCount: forms.length,\n      fieldCount: this.getAllFormFields().length,\n      fields: this.getAllFormFields().map(f => ({\n        name: f.name,\n        id: f.id,\n        type: f.type,\n        label: f.label\n      }))\n    };\n  }\n\n  // Detect fields in a specific form\n  detectFormFields(form) {\n    const fields = [];\n    const inputs = form.querySelectorAll('input[type=\"text\"], input[type=\"email\"], input[type=\"tel\"], textarea, select');\n    inputs.forEach(input => {\n      fields.push({\n        name: input.getAttribute('name') || '',\n        id: input.getAttribute('id') || '',\n        placeholder: input.getAttribute('placeholder') || '',\n        label: this.getLabel(input) || '',\n        type: input.type\n      });\n    });\n    return fields;\n  }\n\n  // Detect all form fields on page\n  detectAllFormFields() {\n    return this.getAllFormFields().map(field => ({\n      name: field.name,\n      id: field.id,\n      placeholder: field.placeholder,\n      label: field.label,\n      type: field.type\n    }));\n  }\n}\n\n// Initialize\nconst autofiller = new EnhancedFormAutofiller();\n
+      'firstName': {
+        patterns: ['first.?name', 'firstname', 'first_name', 'fname', 'given.?name'],
+        selectors: ['[name*="first"]', '[id*="first"]']
+      },
+      'lastName': {
+        patterns: ['last.?name', 'lastname', 'last_name', 'lname', 'surname'],
+        selectors: ['[name*="last"]', '[id*="last"]']
+      },
+      'email': {
+        patterns: ['email', 'e.?mail', 'email.?address', 'contact.?email'],
+        selectors: ['[name*="email"]', '[id*="email"]', 'input[type="email"]']
+      },
+      'phone': {
+        patterns: ['phone', 'mobile', 'telephone', 'cell', 'contact.?phone'],
+        selectors: ['[name*="phone"]', '[id*="phone"]', 'input[type="tel"]']
+      },
+      'location': {
+        patterns: ['location', 'city', 'address', 'state', 'country'],
+        selectors: ['[name*="location"]', '[id*="location"]', '[name*="city"]']
+      },
+      'linkedin': {
+        patterns: ['linkedin', 'linkedin.?url', 'linkedin.?profile'],
+        selectors: ['[name*="linkedin"]', '[id*="linkedin"]']
+      },
+      'github': {
+        patterns: ['github', 'github.?url', 'github.?profile'],
+        selectors: ['[name*="github"]', '[id*="github"]']
+      }
+    };
+  }
+
+  async init() {
+    console.log('🚀 Smart Form Autofiller initialized');
+    
+    // Listen for autofill requests
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      if (request.action === 'autofill') {
+        console.log('📝 Autofill request received');
+        this.autofillAllForms(request.data);
+        sendResponse({ success: true });
+      } else if (request.action === 'detectForms') {
+        const fields = this.detectAllFormFields();
+        sendResponse({ fields, count: fields.length });
+      } else if (request.action === 'getPageAnalysis') {
+        const analysis = this.analyzePageForms();
+        sendResponse({ analysis });
+      }
+    });
+  }
+
+  // ===== MAIN AUTOFILL =====
+  async autofillAllForms(resumeData) {
+    const forms = document.querySelectorAll('form');
+    console.log(`📋 Found ${forms.length} forms on page`);
+
+    forms.forEach((form, index) => {
+      console.log(`🔄 Processing form ${index + 1}`);
+      this.autofillForm(form, resumeData);
+    });
+
+    // Also fill fields outside forms
+    this.autofillStandaloneFields(resumeData);
+  }
+
+  autofillForm(form, resumeData) {
+    const fields = form.querySelectorAll('input, textarea, select');
+    
+    fields.forEach(field => {
+      const matched = this.matchFieldToResume(field, resumeData);
+      if (matched) {
+        this.fillField(field, matched.value);
+        console.log(`✅ Filled: ${matched.type} = ${String(matched.value).substring(0, 30)}`);
+      }
+    });
+  }
+
+  autofillStandaloneFields(resumeData) {
+    const inputs = document.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], textarea');
+    inputs.forEach(input => {
+      if (!input.closest('form')) {
+        const matched = this.matchFieldToResume(input, resumeData);
+        if (matched) {
+          this.fillField(input, matched.value);
+        }
+      }
+    });
+  }
+
+  // ===== SMART FIELD MATCHING =====
+  matchFieldToResume(field, resumeData) {
+    const name = (field.getAttribute('name') || '').toLowerCase();
+    const id = (field.getAttribute('id') || '').toLowerCase();
+    const placeholder = (field.getAttribute('placeholder') || '').toLowerCase();
+    const label = this.getFieldLabel(field).toLowerCase();
+    const combined = `${name} ${id} ${placeholder} ${label}`;
+
+    // Try to match against patterns
+    for (const [resumeField, value] of Object.entries(resumeData)) {
+      if (!value) continue;
+
+      const patterns = this.fieldPatterns[resumeField]?.patterns || [resumeField];
+      
+      for (const pattern of patterns) {
+        const regex = new RegExp(pattern, 'i');
+        if (regex.test(combined)) {
+          return { type: resumeField, value };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  getFieldLabel(field) {
+    // Check for associated label
+    const id = field.getAttribute('id');
+    if (id) {
+      const label = document.querySelector(`label[for="${id}"]`);
+      if (label) return label.textContent;
+    }
+
+    // Check aria-label
+    const ariaLabel = field.getAttribute('aria-label');
+    if (ariaLabel) return ariaLabel;
+
+    // Check placeholder
+    const placeholder = field.getAttribute('placeholder');
+    if (placeholder) return placeholder;
+
+    return '';
+  }
+
+  // ===== FIELD FILLING =====
+  fillField(field, value) {
+    const tagName = field.tagName.toLowerCase();
+
+    if (tagName === 'select') {
+      this.fillSelect(field, value);
+    } else if (tagName === 'textarea' || tagName === 'input') {
+      field.value = String(value);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      field.dispatchEvent(new Event('change', { bubbles: true }));
+      field.dispatchEvent(new Event('blur', { bubbles: true }));
+      field.classList.add('simplify-autofilled');
+    }
+  }
+
+  fillSelect(select, value) {
+    const options = select.querySelectorAll('option');
+    for (const option of options) {
+      if (option.text.toLowerCase().includes(String(value).toLowerCase()) ||
+          option.value.toLowerCase().includes(String(value).toLowerCase())) {
+        select.value = option.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        break;
+      }
+    }
+  }
+
+  // ===== FORM DETECTION =====
+  detectAllFormFields() {
+    const fields = [];
+    const inputs = document.querySelectorAll('input, textarea, select');
+    
+    inputs.forEach(field => {
+      if (this.isVisible(field)) {
+        fields.push({
+          name: field.getAttribute('name') || '',
+          id: field.getAttribute('id') || '',
+          type: field.type || field.tagName.toLowerCase(),
+          placeholder: field.getAttribute('placeholder') || '',
+          label: this.getFieldLabel(field) || '',
+          isRequired: field.required,
+          value: field.value
+        });
+      }
+    });
+    
+    return fields;
+  }
+
+  isVisible(element) {
+    return element.offsetParent !== null &&
+           getComputedStyle(element).display !== 'none' &&
+           getComputedStyle(element).visibility !== 'hidden';
+  }
+
+  analyzePageForms() {
+    return {
+      formCount: document.querySelectorAll('form').length,
+      fieldCount: this.detectAllFormFields().length,
+      isWorkday: document.body.innerHTML.includes('workday'),
+      isLinkedIn: document.domain.includes('linkedin'),
+      isIndeed: document.domain.includes('indeed'),
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+// Initialize
+const autofiller = new SmartFormAutofiller();
